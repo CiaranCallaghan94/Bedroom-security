@@ -9,15 +9,9 @@ rekognition = boto3.client("rekognition")
 cap = cv2.VideoCapture(0)
 img_name = "Saved_Images/opencv_frame.jpeg"
 
-
-def recognitionMethod(image):
-
-    response = rekognition.detect_faces(
-        Image={
-            'Bytes':
-                image
-        })
-    return response
+know_faces = {
+    ""
+}
 
 def takeImage():
 
@@ -28,14 +22,50 @@ def takeImage():
     return encoded_image.tobytes()
 
 
-def sendImageToRek(image):
+def recognitionMethodDetectFaces(image):
 
-    response = recognitionMethod(image)
-    return response
+    response = rekognition.detect_faces(
+        Image={
+            'Bytes':
+                image
+        })
+    print(response)
+    faces_detected = len(response['FaceDetails'])
+    return faces_detected
 
-def checkImage(rekResponse):
-    if len(rekResponse['FaceDetails']) > 0:
-        msg = f"There is someone in your room! (amount: {len(rekResponse['FaceDetails'])})"
+def recognitionFaceInCollection(image):
+
+    person_found = None
+
+    response = rekognition.search_faces_by_image(
+        CollectionId='GetOutOfMyRoom',
+        Image={
+            'Bytes': image
+        }
+    )
+
+    if  len(response['FaceMatches']):
+        person_found = response['FaceMatches'][0]['Face']['ExternalImageId']
+    return person_found
+
+'''
+Method: Takes in how many people are detected in image and if the person is recognised.
+        Sends Ciaran an alert message depending on passed values.
+'''
+def alertCiaran(detected_faces, person_detected):
+    if detected_faces > 0:
+        if detected_faces == 1:
+            msg = "There is someone in your room!"
+        else:
+            msg = f"There are {detected_faces} people in your room!"
+
+        if person_detected != None:
+
+            if person_detected == "ciaran":
+                msg = msg + f" Looks like you!"
+            else:
+                msg = msg + f" Looks like {person_detected.capitalize()}!"
+
         print(msg)
         sendAlert(msg)
         return True
@@ -50,13 +80,25 @@ def sendAlert(msg):
         Message= msg,
     )
 
+def detectPeopleInRoom(image):
+    '''
+    pass an image to detect faces....
+    If face detected, check to see if face is in collection.
+    Send message to subscribers.
+    '''
+    person_detected = None
+    faces_detected = recognitionMethodDetectFaces(image)
+    if faces_detected > 0: person_detected = recognitionFaceInCollection(image)
+
+    alertCiaran(faces_detected,person_detected)
+
+
 while True:
 
     time.sleep(1)
     img = takeImage()
-    rekResp = sendImageToRek(img)
-    if checkImage(rekResp):
-        break
+    detectPeopleInRoom(img)
+    break
 
 cap.release()
 
